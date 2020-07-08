@@ -40,6 +40,23 @@
 	
 	
 	}
+	#Rectangle_11 {
+		fill: rgba(255,255,255,1);
+		stroke: rgba(112,112,112,1);
+		stroke-width: 1px;
+		stroke-linejoin: miter;
+		stroke-linecap: butt;
+		stroke-miterlimit: 4;
+		shape-rendering: auto;
+	}
+	.Rectangle_11 {
+		position: absolute;
+		overflow: visible;
+		width: 1920px;
+		height: 3307px;
+		left: 0px;
+		top: 0px;
+	}
 	#Rectangle_9 {
 		fill: transparent;
 	}
@@ -97,7 +114,7 @@
 		font-size: 58px;
 		color: rgba(0,0,0,1);
 	}
-	#About_m {
+	#About_n {
 		left: 1455px;
 		top: 167px;
 		position: absolute;
@@ -411,24 +428,6 @@
 		top: 2745px;
 		transform: matrix(1,0,0,1,0,0);
 	}
-	#Path_40 {
-		fill: transparent;
-		stroke: rgba(0,0,0,1);
-		stroke-width: 1px;
-		stroke-linejoin: miter;
-		stroke-linecap: butt;
-		stroke-miterlimit: 4;
-		shape-rendering: auto;
-	}
-	.Path_40 {
-		overflow: visible;
-		position: absolute;
-		width: 1588px;
-		height: 1px;
-		left: 166px;
-		top: 3028px;
-		transform: matrix(1,0,0,1,0,0);
-	}
 	#Path_28 {
 		fill: transparent;
 		stroke: rgba(0,0,0,1);
@@ -723,20 +722,6 @@
 		left: 245.208px;
 		top: 5.75px;
 		overflow: visible;
-	}
-	#Copyright_Marek_Torbus_2020 {
-		left: 166px;
-		top: 3028px;
-		position: absolute;
-		overflow: visible;
-		width: 197px;
-		white-space: nowrap;
-		text-align: left;
-		font-family: Plaid;
-		font-style: normal;
-		font-weight: normal;
-		font-size: 15px;
-		color: rgba(0,0,0,1);
 	}
 </style>
 <script id="applicationScript">
@@ -3448,6 +3433,10 @@ window.application = new Application();
 </head>
 <body>
 <div id="About">
+	<svg class="Rectangle_11">
+		<rect id="Rectangle_11" rx="0" ry="0" x="0" y="0" width="1920" height="3307">
+		</rect>
+	</svg>
 	<svg class="Rectangle_9">
 		<rect id="Rectangle_9" rx="0" ry="0" x="0" y="0" width="70" height="3352">
 		</rect>
@@ -3461,23 +3450,23 @@ window.application = new Application();
 	<div id="About_me">
 		<span>About me</span>
 	</div>
-	<div id="About_m">
+	<div id="About_n">
 		<span>About</span>
 	</div>
 	<div onclick="application.goToTargetView(event)" id="Contact">
 		<span>Contact</span>
 	</div>
 	<svg style="width:inherit;height:inherit;overflow:visible;">
-		<rect fill="url(#Group_3_bx_pattern)" width="100%" height="100%"></rect>
-			<pattern elementId="Group_3_bx" id="Group_3_bx_pattern" x="0" y="0" width="100%" height="100%">
-				<image x="0" y="0" width="100%" height="100%" href="Group_3_bx_pattern.png" xlink:href="Group_3_bx_pattern.png"></image>
+		<rect fill="url(#Group_3_bw_pattern)" width="100%" height="100%"></rect>
+			<pattern elementId="Group_3_bw" id="Group_3_bw_pattern" x="0" y="0" width="100%" height="100%">
+				<image x="0" y="0" width="100%" height="100%" href="Group_3_bw_pattern.png" xlink:href="Group_3_bw_pattern.png"></image>
 			</pattern>
 			<img id="Group_3" src="Group_3.png" srcset="Group_3.png 1x, Group_3@2x.png 2x">
 			</svg>
 	<svg style="width:inherit;height:inherit;overflow:visible;">
-		<rect fill="url(#Group_6_by_pattern)" width="100%" height="100%"></rect>
-			<pattern elementId="Group_6_by" id="Group_6_by_pattern" x="0" y="0" width="100%" height="100%">
-				<image x="0" y="0" width="100%" height="100%" href="Group_6_by_pattern.png" xlink:href="Group_6_by_pattern.png"></image>
+		<rect fill="url(#Group_6_bx_pattern)" width="100%" height="100%"></rect>
+			<pattern elementId="Group_6_bx" id="Group_6_bx_pattern" x="0" y="0" width="100%" height="100%">
+				<image x="0" y="0" width="100%" height="100%" href="Group_6_bx_pattern.png" xlink:href="Group_6_bx_pattern.png"></image>
 			</pattern>
 			<img id="Group_6" src="Group_6.png" srcset="Group_6.png 1x, Group_6@2x.png 2x">
 			</svg>
@@ -3492,9 +3481,9 @@ window.application = new Application();
 			<span>Training</span>
 		</div>
 		<svg style="width:inherit;height:inherit;overflow:visible;">
-			<rect fill="url(#Group_15_bz_pattern)" width="100%" height="100%"></rect>
-				<pattern elementId="Group_15_bz" id="Group_15_bz_pattern" x="0" y="0" width="100%" height="100%">
-					<image x="0" y="0" width="100%" height="100%" href="Group_15_bz_pattern.png" xlink:href="Group_15_bz_pattern.png"></image>
+			<rect fill="url(#Group_15_by_pattern)" width="100%" height="100%"></rect>
+				<pattern elementId="Group_15_by" id="Group_15_by_pattern" x="0" y="0" width="100%" height="100%">
+					<image x="0" y="0" width="100%" height="100%" href="Group_15_by_pattern.png" xlink:href="Group_15_by_pattern.png"></image>
 				</pattern>
 				<img id="Group_15" src="Group_15.png" srcset="Group_15.png 1x, Group_15@2x.png 2x">
 				</svg>
@@ -3513,9 +3502,9 @@ window.application = new Application();
 			<span>Work experience</span>
 		</div>
 		<svg style="width:inherit;height:inherit;overflow:visible;">
-			<rect fill="url(#Group_11_b_pattern)" width="100%" height="100%"></rect>
-				<pattern elementId="Group_11_b" id="Group_11_b_pattern" x="0" y="0" width="100%" height="100%">
-					<image x="0" y="0" width="100%" height="100%" href="Group_11_b_pattern.png" xlink:href="Group_11_b_pattern.png"></image>
+			<rect fill="url(#Group_11_bz_pattern)" width="100%" height="100%"></rect>
+				<pattern elementId="Group_11_bz" id="Group_11_bz_pattern" x="0" y="0" width="100%" height="100%">
+					<image x="0" y="0" width="100%" height="100%" href="Group_11_bz_pattern.png" xlink:href="Group_11_bz_pattern.png"></image>
 				</pattern>
 				<img id="Group_11" src="Group_11.png" srcset="Group_11.png 1x, Group_11@2x.png 2x">
 				</svg>
@@ -3548,10 +3537,6 @@ window.application = new Application();
 	</svg>
 	<svg class="Path_39" viewBox="3176 -6730.317 758.5 1">
 		<path id="Path_39" d="M 3176 -6730.31689453125 L 3548.8974609375 -6730.31689453125 L 3934.5 -6730.31689453125">
-		</path>
-	</svg>
-	<svg class="Path_40" viewBox="3176 -6730.317 1588 1">
-		<path id="Path_40" d="M 3176 -6730.31689453125 L 3956.7001953125 -6730.31689453125 L 4764 -6730.31689453125">
 		</path>
 	</svg>
 	<svg class="Path_28" viewBox="3176 -6730.317 758.5 1">
@@ -3633,9 +3618,6 @@ window.application = new Application();
 				</pattern>
 				<img id="Group_19" src="Group_19.png" srcset="Group_19.png 1x, Group_19@2x.png 2x">
 				</svg>
-	</div>
-	<div id="Copyright_Marek_Torbus_2020">
-		<span>Copyright Marek Torbus 2020</span>
 	</div>
 </div>
 </body>
