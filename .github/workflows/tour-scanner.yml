@@ -1,0 +1,81 @@
+name: Tour availability scanner
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: tour-scanner
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/tour-scanner/requirements.txt
+
+      - name: Scan tours page
+        id: scan
+        run: |
+          python scripts/tour-scanner/scan.py \
+            --url "https://stahlhouse.com/tours/" \
+            --state scripts/tour-scanner/state.json
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/tour-scanner/state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update tour scanner state"
+            git push
+          fi
+
+      - name: Ensure tour-scanner label exists
+        if: steps.scan.outputs.has_new_dates == 'true' || steps.scan.outputs.unparsed_change == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create tour-scanner --color FBCA04 \
+            --description "Stahlhouse tour availability scanner" || true
+
+      - name: Open or update issue for new dates
+        if: steps.scan.outputs.has_new_dates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_DATES: ${{ steps.scan.outputs.new_dates }}
+          PROVIDERS: ${{ steps.scan.outputs.providers }}
+        run: |
+          BODY=$(printf 'New tour date(s) detected on https://stahlhouse.com/tours/:\n\n%s\n\nDetected booking widget(s): %s\n\nState file: scripts/tour-scanner/state.json' "$NEW_DATES" "$PROVIDERS")
+          EXISTING=$(gh issue list --label tour-scanner --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "New tour dates available on stahlhouse.com" --body "$BODY" --label tour-scanner
+          fi
+
+      - name: Open or update issue for unparsed change
+        if: steps.scan.outputs.has_new_dates != 'true' && steps.scan.outputs.unparsed_change == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROVIDERS: ${{ steps.scan.outputs.providers }}
+        run: |
+          BODY=$(printf 'The tours page content changed but the scanner could not automatically identify specific new dates.\n\nCheck https://stahlhouse.com/tours/ manually and see scripts/tour-scanner/README.md for tuning tips.\n\nDetected booking widget(s): %s' "$PROVIDERS")
+          EXISTING=$(gh issue list --label tour-scanner --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "stahlhouse.com tours page changed" --body "$BODY" --label tour-scanner
+          fi
