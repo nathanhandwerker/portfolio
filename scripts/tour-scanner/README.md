@@ -26,10 +26,11 @@ Instead:
 4. Diffs the set of `(date, title)` pairs against `known_events` in
    `state.json` (committed back to the repo each run). New ones → issue
    opened/commented with the list.
-5. If the JS event cache can't be read at all (the widget's markup or
-   library changed) or events go to zero while the page's visible text still
-   changed, it opens/comments a lower-key "check manually" issue instead of
-   staying silent — once per distinct change, not every run.
+5. Zero events found is treated as a normal, expected state (the business
+   often has no tours currently open for booking) — it's just recorded, no
+   issue fires. Only if the JS event cache can't be read at all (e.g. the
+   widget's markup or library changed) does it open/comment a lower-key
+   "check manually" issue — once per distinct failure, not every run.
 
 ## If Event Espresso changes its calendar widget
 
