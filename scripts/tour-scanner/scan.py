@@ -3,25 +3,26 @@
 Daily scanner for https://stahlhouse.com/tours/ that looks for newly listed
 tour dates and reports results via GitHub Actions outputs.
 
-How it decides "new dates":
-1. Detects known booking-widget providers embedded in the page (FareHarbor,
-   Bookeo, Checkfront, Peek Pro, Rezdy, Xola, Calendly, Acuity, TicketSpice,
-   Eventbrite) so the state file documents what's actually powering the page.
-2. Pulls every date-like token out of the visible text and common calendar
-   attributes (data-date, data-day, datetime, aria-label, title), keeps only
-   ones that parse as a real future date, and normalizes them to ISO
-   (YYYY-MM-DD).
-3. Compares that set against the dates recorded on the previous run.
+The page's calendar (#espresso_calendar) is an Event Espresso "fullcalendar"
+widget: classic jQuery FullCalendar, populated client-side via AJAX after
+page load. Every day cell carries a data-date attribute whether or not a
+tour runs that day, so scraping raw HTML (even after rendering) can't tell
+availability from filler. Instead this renders the page with a real browser
+(Playwright/Chromium), pages the calendar forward a few months using its own
+"next" button so it fetches those months' events, then reads the events
+straight out of FullCalendar's client-side event cache via
+`jQuery('#espresso_calendar').fullCalendar('clientEvents')` - the same data
+the widget itself uses, not a DOM heuristic.
 
-If nothing date-like can be parsed at all (e.g. the widget renders its
-calendar via an API call this static scrape can't see), it falls back to
-hashing the page's visible text so at least a "the page changed, check
-manually" signal still fires - once per distinct change, not every day.
+Each event has a start date, title, and booking URL. The set of
+(date, title) pairs is diffed against the previous run's state
+(scripts/tour-scanner/state.json, committed back to the repo each run) to
+find newly listed tour dates.
 
-This was written without being able to load the live page (the sandbox this
-was authored in has stahlhouse.com blocked by network policy), so the
-provider list and date-attribute heuristics are best-effort. See README.md
-in this directory for how to verify/tune it against the real page.
+As a secondary signal, the page's full visible text is hashed; if it changes
+while zero events are found (e.g. the widget markup changes and this needs
+updating), a lower-key "check manually" issue fires instead of staying
+silent - once per distinct change, not every run.
 """
 
 import argparse
@@ -30,125 +31,78 @@ import json
 import os
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date
 
-import requests
 from bs4 import BeautifulSoup
-from dateutil import parser as dateparser
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
 DEFAULT_STATE = {
-    "known_dates": [],
+    "known_events": [],
     "content_hash": None,
     "last_checked": None,
-    "providers_detected": [],
 }
 
-# Substrings that show up in <script>/<iframe> src or inline HTML when a page
-# embeds one of these booking widgets.
-PROVIDER_SIGNATURES = {
-    "fareharbor": ["fareharbor"],
-    "bookeo": ["bookeo"],
-    "checkfront": ["checkfront"],
-    "peek": ["peek.com", "peekpro"],
-    "rezdy": ["rezdy"],
-    "xola": ["xola.com", "xola-widget"],
-    "calendly": ["calendly"],
-    "acuity": ["acuityscheduling"],
-    "ticketspice": ["ticketspice"],
-    "eventbrite": ["eventbrite"],
-    "bokun": ["bokun.io"],
-    "regiondo": ["regiondo"],
-}
-
-DATE_ATTRS = ["data-date", "data-day", "datetime", "aria-label", "title"]
-
-MONTH_TEXT_RE = re.compile(
-    r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
-    r"Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+"
-    r"\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4}\b",
-    re.IGNORECASE,
-)
-ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-
-MAX_YEARS_OUT = 3
+CALENDAR_ID = "espresso_calendar"
 USER_AGENT = (
     "Mozilla/5.0 (compatible; TourAvailabilityScanner/1.0; "
     "+https://github.com/nathanhandwerker/portfolio)"
 )
 
-
-def fetch(url: str) -> str:
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
-    resp.raise_for_status()
-    return resp.text
-
-
-def detect_providers(html: str) -> list:
-    lowered = html.lower()
-    found = []
-    for name, signatures in PROVIDER_SIGNATURES.items():
-        if any(sig in lowered for sig in signatures):
-            found.append(name)
-    return sorted(found)
-
-
-def _plausible_future_date(dt: date, today: date) -> bool:
-    if dt < today:
-        return False
-    if dt.year > today.year + MAX_YEARS_OUT:
-        return False
-    return True
+CLIENT_EVENTS_JS = """
+(calendarId) => {
+    try {
+        const cal = jQuery('#' + calendarId);
+        const evts = cal.fullCalendar('clientEvents');
+        return evts.map(e => ({
+            title: e.title || null,
+            start: e.start ? e.start.format('YYYY-MM-DD') : null,
+            end: e.end ? e.end.format('YYYY-MM-DD') : null,
+            url: e.url || null,
+        }));
+    } catch (err) {
+        return null;
+    }
+}
+"""
 
 
-def _try_parse(token: str, today: date):
-    try:
-        parsed = dateparser.parse(token, fuzzy=False, default=None)
-    except (ValueError, OverflowError):
-        return None
-    if parsed is None:
-        return None
-    dt = parsed.date()
-    if not _plausible_future_date(dt, today):
-        return None
-    return dt.isoformat()
-
-
-def extract_dates(soup: BeautifulSoup, today: date) -> set:
-    found = set()
-
-    for tag in soup.find_all(True):
-        for attr in DATE_ATTRS:
-            value = tag.get(attr)
-            if not value:
-                continue
-            for match in ISO_DATE_RE.finditer(value):
-                iso = _try_parse(match.group(0), today)
-                if iso:
-                    found.add(iso)
-            for match in MONTH_TEXT_RE.finditer(value):
-                iso = _try_parse(match.group(0), today)
-                if iso:
-                    found.add(iso)
-
-    page_text = soup.get_text(separator=" ")
-    for match in MONTH_TEXT_RE.finditer(page_text):
-        iso = _try_parse(match.group(0), today)
-        if iso:
-            found.add(iso)
-    for match in ISO_DATE_RE.finditer(page_text):
-        iso = _try_parse(match.group(0), today)
-        if iso:
-            found.add(iso)
-
-    return found
-
-
-def visible_text_hash(soup: BeautifulSoup) -> str:
+def visible_text_hash(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     text = soup.get_text(separator=" ")
     normalized = re.sub(r"\s+", " ", text).strip()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def scrape(url: str, months_ahead: int):
+    """Returns (events_or_None, content_hash). events is None if the
+    calendar's JS event cache couldn't be read (page structure changed)."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(user_agent=USER_AGENT)
+            page.goto(url, wait_until="networkidle", timeout=45000)
+            page.wait_for_selector(f"#{CALENDAR_ID} .fc-header-title h2", timeout=20000)
+
+            for _ in range(months_ahead):
+                page.click(f"#{CALENDAR_ID} .fc-button-next")
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except PlaywrightTimeoutError:
+                    pass
+                page.wait_for_timeout(600)
+
+            events = page.evaluate(CLIENT_EVENTS_JS, CALENDAR_ID)
+            content_hash = visible_text_hash(page.content())
+        finally:
+            browser.close()
+    return events, content_hash
+
+
+def event_key(event: dict) -> str:
+    return f"{event.get('start')}::{event.get('title')}"
 
 
 def load_state(path: str) -> dict:
@@ -186,49 +140,68 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", required=True)
     parser.add_argument("--state", required=True)
+    parser.add_argument("--months-ahead", type=int, default=6)
     args = parser.parse_args()
 
     today = date.today()
     state = load_state(args.state)
 
     try:
-        html = fetch(args.url)
-    except requests.RequestException as exc:
-        print(f"ERROR: failed to fetch {args.url}: {exc}", file=sys.stderr)
+        events, content_hash = scrape(args.url, args.months_ahead)
+    except Exception as exc:  # noqa: BLE001 - surface any scrape failure to the workflow
+        print(f"ERROR: failed to scrape {args.url}: {exc}", file=sys.stderr)
         write_github_output({"fetch_failed": "true"})
         return 1
 
-    soup = BeautifulSoup(html, "html.parser")
-    providers = detect_providers(html)
-    current_dates = extract_dates(BeautifulSoup(html, "html.parser"), today)
-    content_hash = visible_text_hash(soup)
-
-    known_dates = set(state.get("known_dates") or [])
+    had_previous_run = bool(state.get("content_hash"))
     content_changed = content_hash != state.get("content_hash")
+    scrape_broken = events is None
 
-    new_dates = sorted(current_dates - known_dates) if current_dates else []
-    has_new_dates = bool(new_dates) and bool(state.get("content_hash"))
-    unparsed_change = (not current_dates) and content_changed
+    known_events = {e["key"]: e for e in state.get("known_events") or []}
+    current_events = []
+    if not scrape_broken:
+        for e in events:
+            if not e.get("start"):
+                continue
+            entry = {
+                "key": event_key(e),
+                "date": e["start"],
+                "title": e.get("title"),
+                "url": e.get("url"),
+            }
+            current_events.append(entry)
+
+    current_by_key = {e["key"]: e for e in current_events}
+    new_events = [
+        e for key, e in current_by_key.items() if key not in known_events
+    ]
+    new_events.sort(key=lambda e: (e["date"], e["title"] or ""))
+
+    has_new_dates = bool(new_events) and had_previous_run
+    unparsed_change = (scrape_broken or not current_events) and content_changed and not has_new_dates
 
     state["last_checked"] = today.isoformat()
-    state["providers_detected"] = providers
     state["content_hash"] = content_hash
-    if current_dates:
-        state["known_dates"] = sorted(current_dates)
+    if not scrape_broken:
+        state["known_events"] = sorted(current_events, key=lambda e: (e["date"], e["title"] or ""))
     save_state(args.state, state)
 
-    print(f"Providers detected: {providers or 'none'}")
-    print(f"Dates found on page: {len(current_dates)}")
-    print(f"New dates since last run: {new_dates or 'none'}")
+    new_dates_lines = [
+        f"{e['date']} — {e['title'] or 'Untitled tour'}" + (f" ({e['url']})" if e.get("url") else "")
+        for e in new_events
+    ]
+
+    print(f"Scrape broken (JS event cache unreadable): {scrape_broken}")
+    print(f"Events found on calendar: {len(current_events)}")
+    print(f"New events since last run: {new_dates_lines or 'none'}")
     print(f"Unparsed content change: {unparsed_change}")
 
     write_github_output(
         {
             "fetch_failed": "false",
             "has_new_dates": "true" if has_new_dates else "false",
-            "new_dates": "\n".join(new_dates),
-            "num_dates_found": str(len(current_dates)),
-            "providers": ", ".join(providers) if providers else "none detected",
+            "new_dates": "\n".join(new_dates_lines),
+            "num_events_found": str(len(current_events)),
             "unparsed_change": "true" if unparsed_change else "false",
         }
     )

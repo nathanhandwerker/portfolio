@@ -7,46 +7,47 @@ GitHub's normal email notification for that issue — no extra secrets needed.
 
 ## How it works
 
-1. Fetches the tours page.
-2. Detects which booking widget (if any) the page embeds — FareHarbor, Bookeo,
-   Checkfront, Peek Pro, Rezdy, Xola, Calendly, Acuity, TicketSpice, Eventbrite,
-   Bokun, Regiondo — and records it in `state.json` for reference.
-3. Pulls date-like tokens out of the visible text and common calendar
-   attributes (`data-date`, `data-day`, `datetime`, `aria-label`, `title`),
-   keeps the ones that parse as real future dates, and normalizes them to
-   ISO `YYYY-MM-DD`.
-4. Diffs that set against `known_dates` in `state.json` (committed back to the
-   repo each run). New dates → issue opened/commented with the list.
-5. If it can't parse any dates at all but the page's visible text changed
-   since last run, it opens/comments a lower-key "check manually" issue
-   instead of staying silent. This fires once per distinct change, not every
-   day, so it won't spam.
+The tours page's calendar (`#espresso_calendar`) is an Event Espresso
+"fullcalendar" widget — classic jQuery FullCalendar, populated client-side
+via AJAX after page load. Every day cell in the raw HTML carries a
+`data-date` attribute whether or not a tour runs that day, so scraping HTML
+text (even rendered) can't tell availability from filler.
 
-## Known limitation
+Instead:
 
-This was written without being able to load the live page — the sandbox it
-was authored in has `stahlhouse.com` blocked by network policy — so the
-provider list and date heuristics are best-effort, not verified against the
-real markup.
+1. Renders the page with a real browser (Playwright + headless Chromium).
+2. Clicks the calendar's own "next" button forward `--months-ahead` times
+   (default 6) so it fetches each of those months' events via its normal
+   AJAX calls.
+3. Reads the events straight out of FullCalendar's client-side event cache —
+   `jQuery('#espresso_calendar').fullCalendar('clientEvents')` — the same
+   data the widget itself renders from, not a DOM/position heuristic. Each
+   event has a start date, title, and booking URL.
+4. Diffs the set of `(date, title)` pairs against `known_events` in
+   `state.json` (committed back to the repo each run). New ones → issue
+   opened/commented with the list.
+5. If the JS event cache can't be read at all (the widget's markup or
+   library changed) or events go to zero while the page's visible text still
+   changed, it opens/comments a lower-key "check manually" issue instead of
+   staying silent — once per distinct change, not every run.
 
-**After the first couple of scheduled runs**, check the Action's logs
-(`Providers detected: ...`, `Dates found on page: ...`) and `state.json`:
+## If Event Espresso changes its calendar widget
 
-- If `providers_detected` names a widget (e.g. `fareharbor`) but availability
-  actually lives behind that widget's own API/iframe (common — many of these
-  render their calendar client-side via JS), the static scrape may see 0
-  dates even though the page "has" a calendar. In that case the fallback
-  full-page-hash diff still fires a "check manually" issue on any change,
-  but for real per-date tracking you'd add a small provider-specific step to
-  `scan.py` that calls that widget's public availability endpoint directly
-  (open a PR — the diffing/issue-filing logic around `extract_dates()`
-  doesn't need to change).
-- If dates are being over- or under-matched, tighten/loosen the regexes and
-  `DATE_ATTRS` list in `scan.py` based on what the real HTML looks like.
+`CLIENT_EVENTS_JS` in `scan.py` calls the widget's own jQuery FullCalendar
+API, so it should keep working across ordinary content changes (new tours,
+new dates). It would need updating only if the site changes the calendar
+library/plugin itself — the "check manually" issue mentioned above is the
+signal to come look.
 
 ## Manual run
 
-From this directory: `pip install -r requirements.txt && python scan.py --url https://stahlhouse.com/tours/ --state state.json`
+From this directory:
+
+```
+pip install -r requirements.txt
+playwright install --with-deps chromium
+python scan.py --url https://stahlhouse.com/tours/ --state state.json
+```
 
 Or trigger the workflow on demand from the Actions tab ("Run workflow").
 
