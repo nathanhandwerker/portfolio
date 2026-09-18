@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/tour-scanner/requirements.txt
 
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
+
       - name: Scan tours page
         id: scan
         run: |
@@ -56,9 +59,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_DATES: ${{ steps.scan.outputs.new_dates }}
-          PROVIDERS: ${{ steps.scan.outputs.providers }}
         run: |
-          BODY=$(printf 'New tour date(s) detected on https://stahlhouse.com/tours/:\n\n%s\n\nDetected booking widget(s): %s\n\nState file: scripts/tour-scanner/state.json' "$NEW_DATES" "$PROVIDERS")
+          BODY=$(printf 'New tour date(s) detected on https://stahlhouse.com/tours/:\n\n%s\n\nState file: scripts/tour-scanner/state.json' "$NEW_DATES")
           EXISTING=$(gh issue list --label tour-scanner --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body "$BODY"
@@ -70,9 +72,8 @@ jobs:
         if: steps.scan.outputs.has_new_dates != 'true' && steps.scan.outputs.unparsed_change == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROVIDERS: ${{ steps.scan.outputs.providers }}
         run: |
-          BODY=$(printf 'The tours page content changed but the scanner could not automatically identify specific new dates.\n\nCheck https://stahlhouse.com/tours/ manually and see scripts/tour-scanner/README.md for tuning tips.\n\nDetected booking widget(s): %s' "$PROVIDERS")
+          BODY='The tours page content changed but the scanner could not read any events out of the calendar this run. Check https://stahlhouse.com/tours/ manually and see scripts/tour-scanner/README.md for tuning tips.'
           EXISTING=$(gh issue list --label tour-scanner --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body "$BODY"
