@@ -178,7 +178,10 @@ def main() -> int:
     new_events.sort(key=lambda e: (e["date"], e["title"] or ""))
 
     has_new_dates = bool(new_events) and had_previous_run
-    unparsed_change = (scrape_broken or not current_events) and content_changed and not has_new_dates
+    # Zero events is a legitimate, common state (e.g. no tours currently open
+    # for booking) - only flag "check manually" when the JS event cache
+    # itself couldn't be read, not just because it came back empty.
+    unparsed_change = scrape_broken and content_changed
 
     state["last_checked"] = today.isoformat()
     state["content_hash"] = content_hash
